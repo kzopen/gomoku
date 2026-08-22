@@ -1,0 +1,1 @@
+{"schema_version":1,"task_id":"20260820-072504.591145500-session--bash-3","job_id":"bash-3","session_id":"20260820-072504.591145500-session","state":"cancelled","runtime_state":"exited","runtime_lease_until":"0001-01-01T00:00:00Z","version":16,"created_at":"2026-08-22T23:02:54.9253214+08:00","updated_at":"2026-08-22T23:04:08.8098678+08:00","error_code":"job_failed"}

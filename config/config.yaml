@@ -1,0 +1,42 @@
+# 五子棋（Gomoku）服务端配置
+# 单机开发：server_type=room，全部组件（auth/match/room/rank）共驻一个进程，
+# 客户端使用两段式路由（auth.login / room.place / ...），见《开发文档》§7.3。
+# 集群生产：按 gate/room/rank 分别部署，客户端使用三段式路由（gate.auth.login / ...）。
+
+pitaya:
+  serializertype: 1          # 1=JSON（默认，starx 客户端开箱即用） 2=protobuf；见《开发文档》§7.5
+  heartbeat:
+    interval: 5s             # 服务端下发的心跳间隔，客户端据此自动心跳
+  handler:
+    messages:
+      compression: false     # 关闭消息体 zlib 压缩（官方 starx 客户端不处理压缩消息，必须为 false）
+
+app:
+  name: gomoku
+  server_type: room          # 单机开发固定为 room（两段式路由自动补全 serverType）；集群时按 gate|room|rank 部署
+  frontend: true             # 单机下该进程同时承担接入（监听 WebSocket），故为 true
+  port: 3250                 # WebSocket 监听端口
+  grpc_port: 3430            # 集群模式 RPC 端口（单机 Standalone 不使用）
+  cluster: false             # 生产置 true 并配置 NATS/etcd；单机 Standalone 无外部依赖
+  log_level: info            # debug | info | warn | error
+
+mysql:
+  dsn: "root:8A35Nn3BkrCpny65@tcp(47.97.42.179:3306)/gomoku?charset=utf8mb4&parseTime=true&loc=Local"
+  max_open: 50
+  max_idle: 10
+
+redis:
+  addr: "127.0.0.1:6379"
+  password: ""
+  db: 0
+
+game:
+  board_size: 15
+  step_time_limit: 180      # 秒（每步限时 3 分钟，回合切换时重置；超时判负）
+  total_time_limit: 600     # 秒，0=不限（当前版本暂未启用，预留）
+  timer_push_interval: 1    # 秒；剩余≤5s 时自动加密为 200ms
+  heartbeat_timeout: 15      # 秒
+  ai_takeover_grace: 10      # 秒
+  ai_takeover_return_control: false
+  ai_level: 2                # 1 简单 / 2 普通 / 3 困难
+  forbid_rules: false        # 禁手规则（v1 关闭，预留）

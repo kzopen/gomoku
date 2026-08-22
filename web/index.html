@@ -1,0 +1,407 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>五子棋 Web 客户端（starx JS）</title>
+<style>
+  :root { --bg:#1e2430; --panel:#27303f; --line:#3a4757; --text:#dbe4ee; }
+  * { box-sizing: border-box; }
+  body { margin:0; background:var(--bg); color:var(--text); font:14px/1.6 "Segoe UI", system-ui, sans-serif; }
+  #app { display:flex; gap:16px; padding:16px; flex-wrap:wrap; }
+  .card { background:var(--panel); border:1px solid var(--line); border-radius:8px; padding:14px; }
+  #ctrl { width:340px; }
+  #ctrl h1 { font-size:18px; margin:0 0 12px; }
+  .row { display:flex; gap:8px; margin:8px 0; align-items:center; flex-wrap:wrap; }
+  .row label { width:64px; color:#9fb0c3; }
+  input, button { background:#1a212c; color:var(--text); border:1px solid var(--line); border-radius:6px; padding:6px 10px; font:inherit; }
+  button { cursor:pointer; background:#2f5da8; border-color:#3b6fc4; }
+  button:disabled { opacity:.45; cursor:not-allowed; }
+  button.danger { background:#8a3a3a; border-color:#a84b4b; }
+  #status { margin-top:10px; padding:8px; border-radius:6px; background:#1a212c; font-size:13px; min-height:22px; }
+  #game-info { margin-top:8px; padding:8px 10px; border-radius:6px; background:#16293d; border:1px solid #2b4a6b; font-size:13px; line-height:1.7; }
+  #game-info b { color:#7fd1ff; }
+  #timer { margin-top:8px; padding:8px; border-radius:6px; background:#1a212c; border:1px solid var(--line); font-size:15px; font-weight:600; text-align:center; }
+  #timer.go { border-color:#2e8b57; color:#7fe0a3; }
+  #timer.warn { color:#ffb057; }
+  #timer.danger { color:#e05555; animation: blink 1s infinite; }
+  @keyframes blink { 50% { opacity:.4; } }
+  #log { margin-top:10px; background:#161c26; border:1px solid var(--line); border-radius:6px; padding:8px; height:260px; overflow:auto; font:12px/1.5 Consolas, monospace; white-space:pre-wrap; }
+  #board-wrap { background:var(--panel); border:1px solid var(--line); border-radius:8px; padding:14px; }
+  canvas { display:block; cursor:pointer; background:#c8a45c; border-radius:4px; }
+  /* 终局弹窗 */
+  #overlay { position:fixed; inset:0; background:rgba(10,14,20,.7); display:flex; align-items:center; justify-content:center; z-index:99; }
+  #overlay.hidden { display:none; }
+  .modal { background:var(--panel); border:1px solid var(--line); border-radius:12px; padding:28px 40px; text-align:center; box-shadow:0 10px 40px rgba(0,0,0,.5); }
+  .modal h2 { margin:0 0 10px; font-size:28px; }
+  .modal .win { color:#4cd964; }
+  .modal .lose { color:#ff5b5b; }
+  .modal p { color:#9fb0c3; margin:0 0 20px; }
+  .modal button { font-size:16px; padding:10px 32px; }
+</style>
+</head>
+<body>
+<div id="app">
+  <div class="card" id="ctrl">
+    <h1>五子棋 · starx JS 客户端</h1>
+    <div class="row">
+      <label>Host</label><input id="host" value="127.0.0.1" size="12">
+      <label>Port</label><input id="port" value="3250" size="6">
+      <button id="btnConnect">连接</button><button id="btnDisconnect" disabled>断开</button>
+    </div>
+    <div class="row">
+      <label>用户名</label><input id="username" value="player1">
+      <label>密码</label><input id="password" type="password" value="123456">
+      <button id="btnLogin" disabled>登录</button>
+    </div>
+    <div class="row">
+      <button id="btnMatch" disabled>进入匹配</button>
+      <button id="btnCancelMatch" disabled>取消匹配</button>
+      <button id="btnLeave" class="danger" disabled>离开对局</button>
+    </div>
+    <div class="row">
+      <button id="btnReconnect" disabled>模拟重连</button>
+      <button id="btnRank" disabled>排行榜</button>
+    </div>
+    <div id="status">未连接</div>
+    <div id="game-info">等待匹配…</div>
+    <div id="timer">等待对局开始…</div>
+    <div id="log"></div>
+  </div>
+  <div class="card" id="board-wrap">
+    <canvas id="board" width="480" height="480"></canvas>
+  </div>
+</div>
+
+<!-- 终局弹窗：胜利/失败 + 进入下局 -->
+<div id="overlay" class="hidden">
+  <div class="modal">
+    <h2 id="over-title"></h2>
+    <p id="over-reason"></p>
+    <button id="btnNext">进入下局</button>
+  </div>
+</div>
+
+<script src="./lib/protocol.js"></script>
+<script src="./lib/starx-wsclient.js"></script>
+<script>
+'use strict';
+
+/* ============ 全局状态 ============ */
+var state = {
+  connected: false,
+  loggedIn: false,
+  matching: false,
+  inRoom: false,
+  seat: -1,          // 0=黑 1=白
+  myUid: 0,
+  token: '',
+  roomId: 0,
+  moves: [],         // {seat,x,y,ts}
+  turnSeat: -1,
+  aiTakeover: false,
+  spectator: false,
+  boardSize: 15
+};
+
+/* ============ DOM 工具 ============ */
+function $(id) { return document.getElementById(id); }
+function log(msg) {
+  var el = $('log');
+  var t = new Date().toTimeString().slice(0, 8);
+  el.textContent += '[' + t + '] ' + msg + '\n';
+  el.scrollTop = el.scrollHeight;
+}
+function setStatus(msg) { $('status').textContent = msg; }
+function setButtons() {
+  $('btnDisconnect').disabled = !state.connected;
+  $('btnLogin').disabled = !state.connected || state.loggedIn;
+  $('btnMatch').disabled = !state.loggedIn || state.matching || state.inRoom;
+  $('btnCancelMatch').disabled = !state.matching;
+  $('btnLeave').disabled = !state.inRoom;
+  $('btnReconnect').disabled = !state.loggedIn;
+  $('btnRank').disabled = !state.loggedIn;
+}
+
+/* ============ 棋盘绘制 ============ */
+var CELL = 32, MARGIN = 16;
+function drawBoard() {
+  var canvas = $('board'), ctx = canvas.getContext('2d');
+  var n = state.boardSize;
+  canvas.width = MARGIN * 2 + CELL * (n - 1);
+  canvas.height = canvas.width;
+  // 网格
+  ctx.clearRect(0, 0, canvas.width, canvas.height);
+  ctx.strokeStyle = '#4a3520';
+  ctx.lineWidth = 1;
+  for (var i = 0; i < n; i++) {
+    ctx.beginPath();
+    ctx.moveTo(MARGIN, MARGIN + i * CELL);
+    ctx.lineTo(MARGIN + (n - 1) * CELL, MARGIN + i * CELL);
+    ctx.stroke();
+    ctx.beginPath();
+    ctx.moveTo(MARGIN + i * CELL, MARGIN);
+    ctx.lineTo(MARGIN + i * CELL, MARGIN + (n - 1) * CELL);
+    ctx.stroke();
+  }
+  // 星位
+  [[3,3],[3,11],[11,3],[11,11],[7,7]].forEach(function (p) {
+    ctx.beginPath();
+    ctx.arc(MARGIN + p[0] * CELL, MARGIN + p[1] * CELL, 3, 0, Math.PI * 2);
+    ctx.fill();
+  });
+  // 棋子
+  state.moves.forEach(function (m) {
+    var x = MARGIN + m.x * CELL, y = MARGIN + m.y * CELL;
+    ctx.beginPath();
+    ctx.arc(x, y, CELL * 0.42, 0, Math.PI * 2);
+    ctx.fillStyle = m.seat === 0 ? '#111' : '#f5f5f5';
+    ctx.fill();
+    ctx.strokeStyle = '#333';
+    ctx.stroke();
+    if (m.x === state.lastMoveX && m.y === state.lastMoveY) {
+      ctx.strokeStyle = '#e33';
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.arc(x, y, CELL * 0.42 + 3, 0, Math.PI * 2);
+      ctx.stroke();
+      ctx.lineWidth = 1;
+    }
+  });
+  // 回合指示
+  setStatus('对局中 seat=' + (state.seat >= 0 ? (state.seat === 0 ? '黑' : '白') : '观战') +
+    ' 轮到=' + (state.turnSeat === 0 ? '黑' : state.turnSeat === 1 ? '白' : '-') +
+    (state.aiTakeover ? ' AI已接管你' : '') + (state.spectator ? ' 观战中' : ''));
+}
+$('board').addEventListener('click', function (e) {
+  if (!state.inRoom || state.spectator || state.aiTakeover) return;
+  var rect = e.target.getBoundingClientRect();
+  var x = Math.round((e.clientX - rect.left - MARGIN) / CELL);
+  var y = Math.round((e.clientY - rect.top - MARGIN) / CELL);
+  if (x < 0 || x >= state.boardSize || y < 0 || y >= state.boardSize) return;
+  var occupied = state.moves.some(function (m) { return m.x === x && m.y === y; });
+  if (occupied) return;
+  starx.request('room.place', { x: x, y: y }, function (data) {
+    if (data.code !== 0) { log('落子失败 code=' + data.code + ' msg=' + data.msg); return; }
+    log('落子成功 seat=' + data.seat + ' (' + data.x + ',' + data.y + ') round=' + data.round);
+  });
+});
+
+/* ============ starx 生命周期 ============ */
+starx.on('disconnect', function () {
+  state.connected = false; state.loggedIn = false; state.inRoom = false; state.matching = false;
+  log('连接已断开'); setStatus('未连接'); setButtons();
+});
+starx.on('reconnect', function () {
+  log('网络已重连，尝试恢复对局...');
+  // 断线前有进行中的对局：自动调用 room.reconnect 恢复棋盘/计时
+  if (state.hadGame && state.token && state.roomId && !state.inRoom) {
+    $('btnReconnect').click();
+  }
+});
+starx.on('heartbeat timeout', function () { log('心跳超时，将断开'); });
+starx.on('io-error', function () { log('网络错误'); });
+
+/* ============ 倒计时提示 ============ */
+function showTimer(text, cls) {
+  var el = $('timer');
+  el.textContent = text;
+  el.className = cls || '';
+}
+function seatName(seat) {
+  return seat === 0 ? '黑方' : '白方';
+}
+
+/* ============ 服务端推送 ============ */
+starx.on('room.onMatchSuccess', function (d) {
+  state.matching = false; state.inRoom = true;
+  state.roomId = d.room_id; state.seat = d.seat;
+  state.moves = [];
+  state.hadGame = true; // 标记进行中的对局（断线重连后据此自动恢复）
+  localStorage.setItem('gomoku.room', d.room_id); // 持久化房间号，刷新后可恢复
+  // 对局信息：我方颜色、对手是谁、谁先手、步时
+  var myColor = seatName(d.seat);
+  var oppNick = d.seat === 0 ? d.white_nickname : d.black_nickname;
+  var oppColor = seatName(1 - d.seat);
+  $('game-info').innerHTML =
+    '你：<b>' + myColor + '</b>（' + (d.seat === 0 ? '先手' : '后手') + '）<br>' +
+    '对手：<b>' + oppNick + '</b>（' + oppColor + '）<br>' +
+    '开局：<b>黑方先手</b> · 每步限时 <b>' + d.step_time_limit + 's</b>，超时判负';
+  log('撮合成功 room=' + d.room_id + ' 你是' + myColor + '，对手：' + oppNick +
+    '，黑方先手，步时 ' + d.step_time_limit + 's');
+  showTimer('🎉 游戏开始了！你是' + myColor + '，黑方先手 · 剩余 ' + d.step_time_limit + 's', 'go');
+  setButtons(); drawBoard();
+});
+starx.on('room.onTurn', function (d) {
+  state.turnSeat = d.seat;
+  var who = seatName(d.seat) + (d.seat === state.seat ? '（你）' : '（对手）');
+  log('轮到 ' + seatName(d.seat) + ' 步时=' + Math.round(d.step_remain_ms / 1000) + 's');
+  showTimer('轮到 ' + who + ' 落子 · 剩余 ' + Math.round(d.step_remain_ms / 1000) + 's');
+  drawBoard();
+});
+starx.on('room.onTimer', function (d) {
+  // 倒计时推送：更新当前行动方剩余时间
+  if (d.seat !== state.turnSeat) return;
+  var s = Math.ceil(d.step_remain_ms / 1000);
+  var who = seatName(d.seat) + (d.seat === state.seat ? '（你）' : '（对手）');
+  showTimer('轮到 ' + who + ' 落子 · 剩余 ' + s + 's',
+    s <= 5 ? 'danger' : (s <= 30 ? 'warn' : ''));
+});
+starx.on('room.onPlace', function (d) {
+  state.moves.push({ seat: d.seat, x: d.x, y: d.y, ts: Date.now() });
+  state.lastMoveX = d.x; state.lastMoveY = d.y;
+  log('落子 seat=' + (d.seat === 0 ? '黑' : '白') + ' (' + d.x + ',' + d.y + ') 第' + d.round + '手');
+  drawBoard();
+});
+starx.on('room.onPlayerLeave', function (d) {
+  log('对方掉线/离开 seat=' + d.seat + ' reason=' + d.reason + '（' + (d.reason === 1 ? '掉线' : '主动离开') + '）');
+});
+starx.on('room.onPlayerBack', function (d) { log('对方重连恢复 seat=' + d.seat); });
+starx.on('room.onAITakeOver', function (d) {
+  log('AI 接管 seat=' + d.seat);
+  if (d.seat === state.seat) { state.aiTakeover = true; }
+});
+starx.on('room.onGameOver', function (d) {
+  state.inRoom = false; state.turnSeat = -1;
+  state.hadGame = false; // 对局结束，不再自动恢复
+  localStorage.removeItem('gomoku.room');
+  var reasons = ['未知', '五连', '超时', '离开判负', '和棋'];
+  var reasonText = reasons[d.reason] || ('未知(' + d.reason + ')');
+  var win = d.winner === state.seat;
+  var w = d.winner === 0 ? '黑' : '白';
+  log('=== 终局：' + w + ' 胜（' + reasonText + '）=== 共 ' + (d.moves || []).length + ' 手' +
+    (d.ai_takeover_seat >= 0 ? ' AI接管座位=' + d.ai_takeover_seat : ''));
+  log('回放：' + (d.moves || []).map(function (m) { return '(' + m.x + ',' + m.y + ')'; }).join(' '));
+  showTimer('对局结束：' + w + '方胜（' + reasonText + '）', 'danger');
+  $('game-info').textContent = '本局已结束';
+  // 终局弹窗：胜利/失败 + 进入下局
+  var title = $('over-title');
+  title.textContent = win ? '🎉 胜利！' : '😞 失败';
+  title.className = win ? 'win' : 'lose';
+  $('over-reason').textContent = reasonText + '，本局共 ' + (d.moves || []).length + ' 手';
+  $('overlay').className = '';
+  setButtons(); drawBoard();
+});
+
+/* ============ 连接与业务操作 ============ */
+$('btnConnect').onclick = function () {
+  var host = $('host').value.trim() || '127.0.0.1';
+  var port = parseInt($('port').value, 10) || 3250;
+  log('正在连接 ws://' + host + ':' + port + ' ...');
+  starx.init({
+    host: host,
+    port: port,
+    reconnect: true,                 // 断线自动重连（指数退避，最多 10 次）
+    maxReconnectAttempts: 10,
+    user: { platform: 'web', version: '0.0.1' } // 随握手带给服务端
+  }, function () {
+    state.connected = true;
+    log('握手成功，连接已建立（心跳由客户端自动维护）');
+    setStatus('已连接'); setButtons();
+    // 刷新页面后恢复未结束的对局（token/房间号持久化在 localStorage）
+    var savedToken = localStorage.getItem('gomoku.token');
+    var savedRoom = localStorage.getItem('gomoku.room');
+    if (savedToken && savedRoom && !state.inRoom) {
+      state.loggedIn = true;
+      state.token = savedToken;
+      state.roomId = parseInt(savedRoom, 10);
+      state.hadGame = true;
+      log('检测到未结束对局 room=' + state.roomId + '，自动恢复…');
+      $('btnReconnect').click();
+    }
+  });
+};
+
+$('btnDisconnect').onclick = function () { starx.disconnect(); };
+
+$('btnLogin').onclick = function () {
+  starx.request('auth.login', {
+    username: $('username').value.trim(),
+    password: $('password').value
+  }, function (d) {
+    if (d.code !== 0) { log('登录失败 code=' + d.code + ' ' + d.msg); return; }
+    state.loggedIn = true; state.myUid = d.uid; state.token = d.token;
+    localStorage.setItem('gomoku.token', d.token); // 持久化登录态，刷新后用于恢复对局
+    log('登录成功 uid=' + d.uid + ' nickname=' + d.nickname + ' elo=' + d.elo);
+    setButtons();
+  });
+};
+
+$('btnMatch').onclick = function () {
+  state.matching = true; setButtons();
+  log('进入匹配队列 ...');
+  starx.request('match.join', {}, function (d) {
+    if (d.code !== 0) { state.matching = false; log('匹配失败 code=' + d.code + ' ' + d.msg); setButtons(); }
+    else { log('已入队，等待撮合 ...'); }
+  });
+};
+
+$('btnCancelMatch').onclick = function () {
+  starx.request('match.cancel', {}, function (d) {
+    state.matching = false; setButtons();
+    log('取消匹配 code=' + d.code);
+  });
+};
+
+$('btnLeave').onclick = function () {
+  starx.request('room.leave', { reason: 1 }, function (d) {
+    state.inRoom = false;
+    state.roomId = 0; state.turnSeat = -1;
+    state.hadGame = false;
+    localStorage.removeItem('gomoku.room');
+    $('game-info').textContent = '等待匹配…';
+    showTimer('已离开对局');
+    log('离开对局 code=' + d.code + (d.code === 0 ? '（判负，可重新匹配）' : ''));
+    setButtons(); drawBoard();
+  });
+};
+
+$('btnReconnect').onclick = function () {
+  if (!state.roomId || !state.token) { log('尚无对局可重连'); return; }
+  log('请求重连 room=' + state.roomId + ' ...');
+  starx.request('room.reconnect', { room_id: state.roomId, token: state.token }, function (d) {
+    if (d.code !== 0) { log('重连失败 code=' + d.code + ' ' + d.msg); return; }
+    state.inRoom = true; // roomId 已在请求时持有，S2CReconnect 不回传 room_id（见 docs/gomoku.proto）
+    state.seat = d.seat; state.turnSeat = d.turn_seat;
+    state.moves = d.moves || [];
+    state.aiTakeover = d.ai_takeover;
+    state.spectator = d.spectator;
+    log('重连成功 seat=' + (d.seat >= 0 ? d.seat : '观战') +
+      (d.spectator ? '（观战模式）' : '') + ' 已有 ' + state.moves.length + ' 手');
+    setButtons(); drawBoard();
+  });
+};
+
+// 终局弹窗：进入下局（清空棋盘 → 重新进入匹配队列）
+$('btnNext').onclick = function () {
+  $('overlay').className = 'hidden';
+  state.moves = [];            // 清空棋盘
+  state.inRoom = false;
+  state.roomId = 0;
+  state.turnSeat = -1;
+  state.aiTakeover = false;
+  state.spectator = false;
+  state.hadGame = false;
+  localStorage.removeItem('gomoku.room');
+  $('game-info').textContent = '等待匹配…';
+  showTimer('进入匹配中…');
+  drawBoard();
+  setButtons();
+  $('btnMatch').click(); // 复用匹配按钮逻辑
+};
+
+$('btnRank').onclick = function () {
+  starx.request('rank.list', { page: 1, page_size: 10 }, function (d) {
+    if (d.code !== 0) { log('排行榜失败 code=' + d.code); return; }
+    log('=== 排行榜（共 ' + d.total + ' 人）===');
+    d.list.forEach(function (it, i) {
+      log((i + 1) + '. ' + it.nickname + ' elo=' + it.elo);
+    });
+  });
+};
+
+setButtons();
+drawBoard();
+</script>
+</body>
+</html>
