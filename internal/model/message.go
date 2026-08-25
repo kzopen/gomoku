@@ -59,13 +59,20 @@ type S2CTurnChange struct {
 	TotalRemainMs int64 `json:"total_remain_ms"` // 当前方剩余总时
 }
 
+// WinPoint 制胜连线上的一个坐标（S2CGameOver.win_line）
+type WinPoint struct {
+	X int32 `json:"x"`
+	Y int32 `json:"y"`
+}
+
 // S2CGameOver 对应 proto S2CGameOver（push room.onGameOver）
 type S2CGameOver struct {
-	Winner         int32  `json:"winner"`           // Seat
-	Reason         int32  `json:"reason"`           // EndReason
-	EndAt          int64  `json:"end_at"`           // unix ms
-	Moves          []Move `json:"moves"`            // 完整走子记录（回放）
-	AITakeoverSeat int32  `json:"ai_takeover_seat"` // 被 AI 接管的座位，-1=无
+	Winner         int32      `json:"winner"`           // Seat
+	Reason         int32      `json:"reason"`           // EndReason
+	EndAt          int64      `json:"end_at"`           // unix ms
+	Moves          []Move     `json:"moves"`            // 完整走子记录（回放）
+	WinLine        []WinPoint `json:"win_line"`         // 制胜连线坐标（前端高亮；非五连结束为空）
+	AITakeoverSeat int32      `json:"ai_takeover_seat"` // 被 AI 接管的座位，-1=无
 }
 
 // S2CTimer 对应 proto S2CTimer（push room.onTimer）

@@ -18,9 +18,10 @@ type Room struct {
 	TurnSeat  int8 //当前轮到谁下棋 0 黑 1白
 	Round     int32
 	Moves     []model.Move
-	State     int32 // RoomPlaying / RoomOver
-	StepLimit int32 // 秒
-	TotalTime int32 // 秒
+	State     int32            // RoomPlaying / RoomOver
+	StepLimit int32            // 秒
+	TotalTime int32            // 秒
+	winLine   []model.WinPoint // 制胜连线（五连终局时填充，下发给前端高亮）
 
 	blackNick string
 	whiteNick string
@@ -74,6 +75,7 @@ func (r *Room) finish(winner int8, reason int32) {
 		Reason:         reason,
 		EndAt:          model.UnixMS(time.Now()),
 		Moves:          moves,
+		WinLine:        r.winLine,
 		AITakeoverSeat: -1,
 	})
 	// 立即清除双方 session 的房间room_id绑定，允许玩家马上进入下一局
@@ -168,8 +170,12 @@ func (r *Room) Place(uid string, x, y int32) *model.S2CPlacePiece {
 	resp.Y = y
 	resp.Round = r.Round
 	r.pushBoth("room.onPlace", resp)
-	// 胜负判定
-	if common.CheckWin(&r.Board, int(x), int(y), int(color)) {
+	// 胜负判定：一次遍历同时得判胜结果和制胜连线
+	if pts := common.FindWinLine(&r.Board, int(x), int(y), int(color)); len(pts) >= common.WinCount {
+		r.winLine = make([]model.WinPoint, 0, len(pts))
+		for _, p := range pts {
+			r.winLine = append(r.winLine, model.WinPoint{X: int32(p.X), Y: int32(p.Y)})
+		}
 		r.finish(seat, common.EndFive)
 		return resp
 	}

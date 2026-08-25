@@ -29,10 +29,11 @@
   #log { margin-top:10px; background:#161c26; border:1px solid var(--line); border-radius:6px; padding:8px; height:260px; overflow:auto; font:12px/1.5 Consolas, monospace; white-space:pre-wrap; }
   #board-wrap { background:var(--panel); border:1px solid var(--line); border-radius:8px; padding:14px; }
   canvas { display:block; cursor:pointer; background:#c8a45c; border-radius:4px; }
-  /* 终局弹窗 */
-  #overlay { position:fixed; inset:0; background:rgba(10,14,20,.7); display:flex; align-items:center; justify-content:center; z-index:99; }
-  #overlay.hidden { display:none; }
-  .modal { background:var(--panel); border:1px solid var(--line); border-radius:12px; padding:28px 40px; text-align:center; box-shadow:0 10px 40px rgba(0,0,0,.5); }
+  /* 终局结果（棋盘下方，非弹窗） */
+  #result { margin-top:10px; text-align:center; font-size:20px; font-weight:bold; min-height:28px; }
+  #result.win { color:#4cd964; }
+  #result.lose { color:#ff6b6b; }
+  #btnNext { display:none; margin:10px auto 0; }
   .modal h2 { margin:0 0 10px; font-size:28px; }
   .modal .win { color:#4cd964; }
   .modal .lose { color:#ff5b5b; }
@@ -70,14 +71,7 @@
   </div>
   <div class="card" id="board-wrap">
     <canvas id="board" width="480" height="480"></canvas>
-  </div>
-</div>
-
-<!-- 终局弹窗：胜利/失败 + 进入下局 -->
-<div id="overlay" class="hidden">
-  <div class="modal">
-    <h2 id="over-title"></h2>
-    <p id="over-reason"></p>
+    <div id="result"></div>
     <button id="btnNext">进入下局</button>
   </div>
 </div>
@@ -98,6 +92,7 @@ var state = {
   token: '',
   roomId: 0,
   moves: [],         // {seat,x,y,ts}
+  winLine: [],       // 制胜连线坐标（终局高亮用）
   turnSeat: -1,
   aiTakeover: false,
   spectator: false,
@@ -168,6 +163,16 @@ function drawBoard() {
       ctx.lineWidth = 1;
     }
   });
+  // 终局五子连线高亮
+  state.winLine.forEach(function (p) {
+    var x = MARGIN + p.x * CELL, y = MARGIN + p.y * CELL;
+    ctx.strokeStyle = '#ff2d2d';
+    ctx.lineWidth = 3;
+    ctx.beginPath();
+    ctx.arc(x, y, CELL * 0.42 + 4, 0, Math.PI * 2);
+    ctx.stroke();
+    ctx.lineWidth = 1;
+  });
   // 回合指示
   setStatus('对局中 seat=' + (state.seat >= 0 ? (state.seat === 0 ? '黑' : '白') : '观战') +
     ' 轮到=' + (state.turnSeat === 0 ? '黑' : state.turnSeat === 1 ? '白' : '-') +
@@ -217,6 +222,10 @@ starx.on('room.onMatchSuccess', function (d) {
   state.matching = false; state.inRoom = true;
   state.roomId = d.room_id; state.seat = d.seat;
   state.moves = [];
+  state.winLine = []; // 新对局：清空上一局高亮
+  $('result').className = 'result';
+  $('result').textContent = '';
+  $('btnNext').style.display = 'none';
   state.hadGame = true; // 标记进行中的对局（断线重连后据此自动恢复）
   localStorage.setItem('gomoku.room', d.room_id); // 持久化房间号，刷新后可恢复
   // 对局信息：我方颜色、对手是谁、谁先手、步时
@@ -274,12 +283,12 @@ starx.on('room.onGameOver', function (d) {
   log('回放：' + (d.moves || []).map(function (m) { return '(' + m.x + ',' + m.y + ')'; }).join(' '));
   showTimer('对局结束：' + w + '方胜（' + reasonText + '）', 'danger');
   $('game-info').textContent = '本局已结束';
-  // 终局弹窗：胜利/失败 + 进入下局
-  var title = $('over-title');
-  title.textContent = win ? '🎉 胜利！' : '😞 失败';
-  title.className = win ? 'win' : 'lose';
-  $('over-reason').textContent = reasonText + '，本局共 ' + (d.moves || []).length + ' 手';
-  $('overlay').className = '';
+  // 封盘 + 高亮制胜连线（数据由服务端返回，棋盘下方显示胜负，不弹窗）
+  state.winLine = (d.win_line || []).map(function (p) { return { x: p.x, y: p.y }; });
+  var el = $('result');
+  el.className = 'result ' + (win ? 'win' : 'lose');
+  el.textContent = (win ? '🎉 胜利！' : '😞 失败') + '（' + reasonText + '，共 ' + (d.moves || []).length + ' 手）';
+  $('btnNext').style.display = 'block';
   setButtons(); drawBoard();
 });
 
@@ -299,16 +308,16 @@ $('btnConnect').onclick = function () {
     log('握手成功，连接已建立（心跳由客户端自动维护）');
     setStatus('已连接'); setButtons();
     // 刷新页面后恢复未结束的对局（token/房间号持久化在 localStorage）
-    var savedToken = localStorage.getItem('gomoku.token');
-    var savedRoom = localStorage.getItem('gomoku.room');
-    if (savedToken && savedRoom && !state.inRoom) {
-      state.loggedIn = true;
-      state.token = savedToken;
-      state.roomId = parseInt(savedRoom, 10);
-      state.hadGame = true;
-      log('检测到未结束对局 room=' + state.roomId + '，自动恢复…');
-      $('btnReconnect').click();
-    }
+    // var savedToken = localStorage.getItem('gomoku.token');
+    // var savedRoom = localStorage.getItem('gomoku.room');
+    // if (savedToken && savedRoom && !state.inRoom) {
+    //   state.loggedIn = true;
+    //   state.token = savedToken;
+    //   state.roomId = parseInt(savedRoom, 10);
+    //   state.hadGame = true;
+    //   log('检测到未结束对局 room=' + state.roomId + '，自动恢复…');
+    //   $('btnReconnect').click();
+    // }
   });
 };
 
@@ -372,16 +381,19 @@ $('btnReconnect').onclick = function () {
   });
 };
 
-// 终局弹窗：进入下局（清空棋盘 → 重新进入匹配队列）
+// 进入下局（清空棋盘/高亮 → 重新进入匹配队列）
 $('btnNext').onclick = function () {
-  $('overlay').className = 'hidden';
   state.moves = [];            // 清空棋盘
+  state.winLine = [];          // 清空高亮
   state.inRoom = false;
   state.roomId = 0;
   state.turnSeat = -1;
   state.aiTakeover = false;
   state.spectator = false;
   state.hadGame = false;
+  $('result').className = 'result';
+  $('result').textContent = '';
+  $('btnNext').style.display = 'none';
   localStorage.removeItem('gomoku.room');
   $('game-info').textContent = '等待匹配…';
   showTimer('进入匹配中…');
