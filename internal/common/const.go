@@ -19,11 +19,11 @@ const (
 
 // 对局参数默认值（可被 config/game 覆盖）
 const (
-	DefaultStepTimeLimit   = 30  // 秒
-	DefaultTotalTimeLimit  = 600 // 秒，0=不限
-	DefaultTimerPushInterv = 1   // 秒
-	DefaultHeartbeatTo     = 15  // 秒
-	DefaultAITakeoverGrace = 10  // 秒
+	DefaultStepTimeLimit   = 30 // 秒
+	DefaultTotalTimeLimit  = 0  // 秒，0=不限
+	DefaultTimerPushInterv = 1  // 秒
+	DefaultHeartbeatTo     = 15 // 秒
+	DefaultAITakeoverGrace = 10 // 秒
 	DefaultAILevel         = 2
 )
 const (

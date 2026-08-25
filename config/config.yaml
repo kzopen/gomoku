@@ -32,7 +32,7 @@ redis:
 
 game:
   board_size: 15
-  step_time_limit: 180      # 秒（每步限时 3 分钟，回合切换时重置；超时判负）
+  step_time_limit: 30      # 秒（每步限时 3 分钟，回合切换时重置；超时判负）
   total_time_limit: 600     # 秒，0=不限（当前版本暂未启用，预留）
   timer_push_interval: 1    # 秒；剩余≤5s 时自动加密为 200ms
   heartbeat_timeout: 15      # 秒

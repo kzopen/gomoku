@@ -80,8 +80,10 @@ type C2SPlacePiece struct {
 }
 
 type S2CPlacePiece struct {
-	Code int32  `json:"code"`
-	Msg  string `json:"msg"`
-	X    int32  `json:"x"`
-	Y    int32  `json:"y"`
+	Code  int32  `json:"code"`
+	Msg   string `json:"msg"`
+	Seat  int32  `json:"seat"`
+	X     int32  `json:"x"`
+	Y     int32  `json:"y"`
+	Round int32  `json:"round"` // 第几手，从 1 开始
 }

@@ -32,7 +32,7 @@ type Room struct {
 }
 
 // startTurn 启动当前回合计时：超时判负 + 每秒倒计时推送（剩余≤5s 时加密到 200ms）。
-func (r *Room) startGame() {
+func (r *Room) startTurn() {
 	if r.stepTimer != nil {
 		r.stepTimer.Stop()
 	}
@@ -41,6 +41,7 @@ func (r *Room) startGame() {
 	r.stepDeadline = time.Now().Add(d)
 	r.stepTimer = time.AfterFunc(d, func() { r.onTimeout() })
 
+	//todo 这块还不是很理解，重做
 	r.stopPush()
 	r.pushStop = make(chan struct{})
 	go r.pushTicker(r.pushStop)
@@ -126,6 +127,70 @@ func (r *Room) pushTicker(stop chan struct{}) {
 			})
 		}
 	}
+}
+
+func (r *Room) Place(uid string, x, y int32) *model.S2CPlacePiece {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	resp := &model.S2CPlacePiece{}
+	if r.State != common.RoomPlaying {
+		resp.Code = common.CodeRoomState
+		resp.Msg = "房间状态不允许（未开始/已结束）"
+		return resp
+	}
+	seat := r.seatOf(uid)
+	if seat < 0 {
+		resp.Code = common.CodeRoomNotFound
+		resp.Msg = "不在本房间"
+		return resp
+	}
+	if seat != r.TurnSeat {
+		resp.Code = common.CodeNotYourTurn
+		resp.Msg = "非己方回合"
+		return resp
+	}
+	if x < 0 || x >= common.BoardSize || y < 0 || y >= common.BoardSize || r.Board[x][y] != 0 {
+		resp.Code = common.CodeIllegalMove
+		resp.Msg = "坐标越界或已有棋子"
+		return resp
+	}
+	color := seat + 1 //color 1=黑 2=白
+	r.Board[x][y] = int(color)
+	r.Round++
+	r.Moves = append(r.Moves, model.Move{
+		Seat: int32(seat),
+		X:    x,
+		TS:   model.UnixMS(time.Now()),
+	})
+	resp.Code = common.CodeOK
+	resp.Seat = int32(seat)
+	resp.X = x
+	resp.Y = y
+	resp.Round = r.Round
+	r.pushBoth("room.onPlace", resp)
+	// 胜负判定
+	if common.CheckWin(&r.Board, int(x), int(y), int(color)) {
+		r.finish(seat, common.EndFive)
+		return resp
+	}
+	r.TurnSeat = 1 - seat
+	r.startTurn()
+	r.pushBoth("room.onTurn", &model.S2CTurnChange{
+		Seat:          int32(r.TurnSeat),
+		StepRemainMs:  int64(r.StepLimit) * 1000,
+		TotalRemainMs: int64(r.TotalTime) * 1000,
+	})
+	return resp
+}
+
+// seatOf 返回 uid 的座位；不在房间返回 -1
+func (r *Room) seatOf(uid string) int8 {
+	for i := 0; i < 2; i++ {
+		if strconv.FormatInt(r.Seat[i], 10) == uid {
+			return int8(i)
+		}
+	}
+	return -1
 }
 
 func (r *Room) pushBoth(route string, v interface{}) {

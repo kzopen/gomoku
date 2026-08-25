@@ -47,8 +47,8 @@ func (m *RoomManager) CreateGameRoom(blackUID, whiteUID int64) (int64, error) {
 		Seat:      [2]int64{blackUID, whiteUID},
 		TurnSeat:  common.SeatBlack,
 		State:     common.RoomPlaying,
-		StepLimit: int32(m.game.StepTimeLimit),
-		TotalTime: int32(m.game.TotalTimeLimit),
+		StepLimit: int32(m.game.StepTimeLimit),  //回合限时
+		TotalTime: int32(m.game.TotalTimeLimit), //整体限时
 	}
 	if r.StepLimit == 0 {
 		r.StepLimit = common.DefaultStepTimeLimit
@@ -89,7 +89,7 @@ func (m *RoomManager) CreateGameRoom(blackUID, whiteUID int64) (int64, error) {
 			StartAt:        model.UnixMS(time.Now()),
 		}, []string{strconv.FormatInt(p.uid, 10)})
 	}
-	r.startGame()
+	r.startTurn()
 	r.pushBoth("room.onTurn", &model.S2CTurnChange{
 		Seat:          0,
 		StepRemainMs:  int64(r.StepLimit) * 1000,
