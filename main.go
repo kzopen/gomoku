@@ -15,7 +15,9 @@ import (
 	logruswrapper "github.com/topfreegames/pitaya/v2/logger/logrus"
 	"github.com/topfreegames/pitaya/v2/serialize/json"
 	"gomoku/internal/app/auth"
+	"gomoku/internal/app/match"
 	"gomoku/internal/model"
+	"gomoku/internal/service"
 	"os"
 	"strings"
 	"time"
@@ -53,15 +55,15 @@ func main() {
 
 	app := builder.Build()
 
-	// 房间管理器（对局核心：撮合成功后由 match 调用创建房间，room.place 定位对局）
-	//roomMgr := service.NewRoomManager(app, builder.SessionPool, db, cfg.Game)
+	// 全局只有一个房间管理器（对局核心：撮合成功后由 match 调用创建房间，room.place 定位对局）
+	roomMgr := service.NewRoomManager(app, builder.SessionPool, db, cfg.Game)
 
 	// 注册组件（组件名与方法名统一小写，与《开发文档》§6.2/§7.3 路由一致）
 	register := func(c component.Component, name string) {
 		app.Register(c, component.WithName(name), component.WithNameFunc(strings.ToLower))
 	}
 	register(auth.New(app, db, rdb), "auth")
-	//register(match.New(app, rdb, roomMgr), "match")
+	register(match.New(app, rdb, roomMgr), "match")
 	//register(room.New(app, roomMgr, rdb), "room")
 	//register(rank.New(app), "rank")
 
@@ -123,8 +125,3 @@ func loadConfig(path string) (*model.Config, *viper.Viper) {
 	return cfg, v
 
 }
-
-
-
-
-

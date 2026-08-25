@@ -1,0 +1,209 @@
+syntax = "proto3";
+
+package gomoku;
+
+option go_package = "five/internal/protocol/gomoku;gomoku";
+
+// ==================== 公共定义 ====================
+
+// 座位：黑方先手
+enum Seat {
+  SEAT_BLACK = 0;
+  SEAT_WHITE = 1;
+}
+
+// 终局原因
+enum EndReason {
+  END_UNKNOWN = 0;
+  END_FIVE = 1;    // 五连
+  END_TIMEOUT = 2; // 超时判负
+  END_LEAVE = 3;   // 离开判负
+  END_DRAW = 4;    // 和棋（预留）
+}
+
+// 房间状态
+enum RoomState {
+  ROOM_PLAYING = 0;
+  ROOM_OVER = 1;
+}
+
+// ==================== 登录 ====================
+// 路由: auth.login (req/resp)
+
+message C2SLogin {
+  string username = 1;
+  string password = 2;
+}
+
+message S2CLogin {
+  int32 code = 1; // 0=成功，非 0 见客户端错误码表
+  string msg = 2;
+  int64 uid = 3;
+  string token = 4;
+  string nickname = 5;
+  string avatar = 6;
+  int32 elo = 7;
+  int32 wins = 8;
+  int32 losses = 9;
+  int32 draws = 10;
+}
+
+// ==================== 匹配 ====================
+// 路由: match.join / match.cancel (req/resp)，撮合结果走 push room.onMatchSuccess
+
+message C2SJoinMatch {}
+
+message S2CJoinMatch {
+  int32 code = 1;
+  string msg = 2;
+}
+
+message C2SCancelMatch {}
+
+message S2CCancelMatch {
+  int32 code = 1;
+}
+
+message S2CMatchSuccess {
+  int64 room_id = 1;
+  int32 seat = 2; // Seat
+  int64 black_uid = 3;
+  int64 white_uid = 4;
+  string black_nickname = 5;
+  string white_nickname = 6;
+  int32 step_time_limit = 7;  // 秒
+  int32 total_time_limit = 8; // 秒
+  int64 start_at = 9;         // unix ms
+}
+
+// ==================== 对局 ====================
+// 路由: room.place / room.leave (req/resp)，其余为 push
+
+message C2SPlacePiece {
+  int32 x = 1;
+  int32 y = 2;
+}
+
+message S2CPlacePiece {
+  int32 code = 1; // 0=成功
+  string msg = 2;
+  int32 seat = 3;
+  int32 x = 4;
+  int32 y = 5;
+  int32 round = 6; // 第几手，从 1 开始
+}
+
+message S2CTurnChange {
+  int32 seat = 1;             // 当前行动方
+  int64 step_remain_ms = 2;   // 当前方剩余步时
+  int64 total_remain_ms = 3;  // 当前方剩余总时
+}
+
+message S2CTimer {
+  int32 seat = 1;
+  int64 step_remain_ms = 2;
+  int64 total_remain_ms = 3;
+}
+
+message C2SLeaveGame {
+  int32 reason = 1; // 1=主动离开
+}
+
+message S2CLeaveGame {
+  int32 code = 1;
+}
+
+// 对方离开通知：reason 1=掉线 2=主动离开
+message S2CPlayerLeave {
+  int32 seat = 1;
+  int32 reason = 2;
+}
+
+message S2CPlayerBack {
+  int32 seat = 1;
+}
+
+message S2CAITakeOver {
+  int32 seat = 1;
+}
+
+message S2CGameOver {
+  int32 winner = 1;            // Seat
+  int32 reason = 2;            // EndReason
+  int64 end_at = 3;            // unix ms
+  repeated Move moves = 4;     // 完整走子记录（回放）
+  int32 ai_takeover_seat = 5;  // 被 AI 接管的座位，-1=无
+}
+
+message Move {
+  int32 seat = 1;
+  int32 x = 2;
+  int32 y = 3;
+  int64 ts = 4; // unix ms
+}
+
+// ==================== 重连 ====================
+// 路由: room.reconnect (req/resp)
+
+message C2SReconnect {
+  int64 room_id = 1;
+  string token = 2;
+}
+
+message S2CReconnect {
+  int32 code = 1;
+  string msg = 2;
+  int32 state = 3;             // RoomState
+  int32 seat = 4;              // 自己的座位，观战为 -1
+  repeated Move moves = 5;     // 已有走子（含 AI 走的）
+  int32 turn_seat = 6;         // 当前行动方
+  int64 step_remain_ms = 7;    // 当前行动方剩余步时
+  int64 total_remain_ms = 8;   // 当前行动方剩余总时
+  bool ai_takeover = 9;        // 自己是否已被 AI 接管
+  bool spectator = 10;         // 是否观战（被接管后重连为观战）
+  int64 black_uid = 11;
+  int64 white_uid = 12;
+  string black_nickname = 13;
+  string white_nickname = 14;
+  int32 step_time_limit = 15;  // 秒
+  int32 total_time_limit = 16; // 秒
+}
+
+// ==================== 排行榜 ====================
+// 路由: rank.list (req/resp)
+
+message C2SRankList {
+  int32 page = 1;
+  int32 page_size = 2;
+}
+
+message RankItem {
+  int64 uid = 1;
+  string nickname = 2;
+  string avatar = 3;
+  int32 elo = 4;
+  int32 wins = 5;
+  int32 losses = 6;
+  int32 draws = 7;
+  int32 runaways = 8;
+}
+
+message S2CRankList {
+  int32 code = 1;
+  repeated RankItem list = 2;
+  int32 total = 3;
+  int32 page = 4;
+}
+
+// ==================== 错误码约定 ====================
+// 0    成功
+// 1001 参数错误
+// 1002 未登录 / 会话失效
+// 2001 已在匹配中 / 已在房间中
+// 2002 匹配队列已满或撮合失败
+// 3001 非己方回合
+// 3002 坐标越界或已有棋子
+// 3003 房间状态不允许（未开始/已结束）
+// 3004 已被 AI 接管，无权落子
+// 4001 房间不存在或已销毁
+// 5001 服务器内部错误
