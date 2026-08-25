@@ -1,0 +1,28 @@
+# ===== Go 编译产物 =====
+# go build 默认输出的二进制（模块名为 gomoku）
+gomoku
+gomoku.exe
+*.exe
+*.test
+*.out
+/dist/
+/bin/
+
+# ===== 日志文件 =====
+*.log
+logs/
+
+# ===== IDE / 编辑器 =====
+.idea/
+.vscode/
+*.iml
+*.swp
+
+# ===== 本地配置（含密钥/密码，不入库）=====
+config/*.local.*
+config/local/
+*.local
+
+# ===== Reasonix 会话记录（工具自动生成，不入库）=====
+.reasonix/
+reasonix.toml
