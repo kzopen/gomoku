@@ -16,6 +16,7 @@ import (
 	"github.com/topfreegames/pitaya/v2/serialize/json"
 	"gomoku/internal/app/auth"
 	"gomoku/internal/app/match"
+	"gomoku/internal/app/rank"
 	"gomoku/internal/app/room"
 	"gomoku/internal/model"
 	"gomoku/internal/service"
@@ -66,7 +67,7 @@ func main() {
 	register(auth.New(app, db, rdb), "auth")
 	register(match.New(app, rdb, roomMgr), "match")
 	register(room.New(app, db, rdb, roomMgr), "room")
-	//register(rank.New(app), "rank")
+	register(rank.New(app, rdb), "rank")
 
 	l.Infof("starting gomoku server: type=%s frontend=%v port=%d mode=%v",
 		cfg.App.ServerType, cfg.App.Frontend, cfg.App.Port, mode)

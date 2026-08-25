@@ -69,6 +69,19 @@ func IsOnline(ctx context.Context, c *redis.Client, uid int64) (bool, error) {
 	return n > 0, nil
 }
 
+// OnlineCount 统计在线人数：online:* key 的数量（TTL 未过期即在线）。
+// 教学版用 Keys 简单直观；生产量大时应改用 SCAN 游标遍历避免阻塞 Redis。
+func OnlineCount(ctx context.Context, c *redis.Client) (int64, error) {
+	if c == nil {
+		return 0, nil
+	}
+	keys, err := c.Keys(ctx, "online:*").Result()
+	if err != nil {
+		return 0, err
+	}
+	return int64(len(keys)), nil
+}
+
 // ==================== 匹配队列 ====================
 
 // MatchEnqueue 入队（LPUSH）

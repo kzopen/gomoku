@@ -63,7 +63,7 @@ const (
 
 // SessionTTL / OnlineTTL / StatTTL 单位秒
 const (
-	SessionTTL = 7 * 24 * 3600
+	SessionTTL = 3600
 	OnlineTTL  = 60
 	StatTTL    = 3600
 )

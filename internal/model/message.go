@@ -136,3 +136,23 @@ type S2CLeaveGame struct {
 type S2CPlayerBack struct {
 	Seat int32 `json:"seat"`
 }
+
+// ==================== 排行榜 / 在线 ====================
+
+// C2SOnlineCount rank.online_count 请求（在线人数）
+type C2SOnlineCount struct{}
+
+// S2COnlineCount rank.online_count 响应
+type S2COnlineCount struct {
+	Code  int32  `json:"code"`
+	Msg   string `json:"msg"`
+	Count int64  `json:"count"`
+}
+
+// C2SPing rank.ping 请求（心跳续期，前端 notify 发送）
+type C2SPing struct{}
+
+// S2CPing rank.ping 响应（notify 无响应，占位）
+type S2CPing struct {
+	Code int32 `json:"code"`
+}

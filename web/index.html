@@ -74,6 +74,7 @@
       <button id="btnRank" disabled>排行榜</button>
     </div>
     <div id="status">未连接</div>
+    <div id="online-count" style="display:none"></div>
     <div id="game-info">等待匹配…</div>
     <div id="timer">等待对局开始…</div>
     <div id="log"></div>
@@ -204,6 +205,7 @@ $('board').addEventListener('click', function (e) {
 /* ============ starx 生命周期 ============ */
 starx.on('disconnect', function () {
   state.connected = false; state.loggedIn = false; state.inRoom = false; state.matching = false;
+  stopOnlineTrack(); // 断开：停止心跳/人数轮询，清除在线显示
   log('连接已断开'); setStatus('未连接'); setButtons();
 });
 starx.on('reconnect', function () {
@@ -228,6 +230,32 @@ function showMatchBanner(text) {
   el.className = 'show'; // 动画：淡入
   clearTimeout(el._t);
   el._t = setTimeout(function () { el.className = ''; }, 3000); // 3 秒后淡出
+}
+
+/* ============ 在线人数 / 心跳 ============ */
+var heartbeatTimer = null, onlineTimer = null;
+function startOnlineTrack() {
+  stopOnlineTrack(); // 幂等：先清旧的
+  starx.notify('rank.ping', {});            // 立即发一次心跳（续期 TTL）
+  heartbeatTimer = setInterval(function () { starx.notify('rank.ping', {}); }, 30000); // 每 30s 续期
+  fetchOnlineCount();
+  onlineTimer = setInterval(fetchOnlineCount, 10000); // 每 10s 刷新人数
+}
+function fetchOnlineCount() {
+  starx.request('rank.onlinecount', {}, function (d) {
+    if (d.code !== 0) return;
+    var el = $('online-count');
+    if (el) {
+      el.style.display = 'block';
+      el.textContent = '👥 在线 ' + d.count + ' 人';
+    }
+  });
+}
+function stopOnlineTrack() {
+  if (heartbeatTimer) { clearInterval(heartbeatTimer); heartbeatTimer = null; }
+  if (onlineTimer) { clearInterval(onlineTimer); onlineTimer = null; }
+  var el = $('online-count');
+  if (el) { el.style.display = 'none'; el.textContent = ''; }
 }
 function seatName(seat) {
   return seat === 0 ? '黑方' : '白方';
@@ -340,7 +368,8 @@ $('btnLogin').onclick = function () {
     localStorage.setItem('gomoku.token', d.token); // 持久化登录态，刷新后用于恢复对局
     log('登录成功 uid=' + d.uid + ' nickname=' + d.nickname + ' elo=' + d.elo);
     setButtons();
-    // 登录后自动判断是否在游戏中：有未结束房间 → 自动进入房间恢复对局（前端触发，无需按钮）
+    // 登录后启动在线心跳 + 人数轮询，并自动恢复未结束对局（前端触发）
+    startOnlineTrack();
     autoResumeGame();
   });
 };
