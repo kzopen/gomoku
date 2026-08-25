@@ -94,3 +94,45 @@ type S2CPlacePiece struct {
 	Y     int32  `json:"y"`
 	Round int32  `json:"round"` // 第几手，从 1 开始
 }
+
+// ==================== 重连 / 离开 ====================
+
+// C2SReconnect room.reconnect 请求（断线恢复）
+type C2SReconnect struct {
+	RoomID int64  `json:"room_id"`
+	Token  string `json:"token"`
+}
+
+// S2CReconnect room.reconnect 响应：全量对局状态（前端据此恢复棋盘/计时）
+type S2CReconnect struct {
+	Code           int32  `json:"code"`
+	Msg            string `json:"msg"`
+	State          int32  `json:"state"` // RoomPlaying / RoomOver
+	Seat           int32  `json:"seat"`  // 本玩家座位（观战 -1）
+	Moves          []Move `json:"moves"`
+	TurnSeat       int32  `json:"turn_seat"`
+	StepRemainMs   int64  `json:"step_remain_ms"`
+	TotalRemainMs  int64  `json:"total_remain_ms"`
+	AITakeover     bool   `json:"ai_takeover"`
+	Spectator      bool   `json:"spectator"`
+	BlackUID       int64  `json:"black_uid"`
+	WhiteUID       int64  `json:"white_uid"`
+	BlackNickname  string `json:"black_nickname"`
+	WhiteNickname  string `json:"white_nickname"`
+	StepTimeLimit  int32  `json:"step_time_limit"`
+	TotalTimeLimit int32  `json:"total_time_limit"`
+}
+
+// C2SLeaveGame room.leave 请求（主动离开判负）
+type C2SLeaveGame struct{}
+
+// S2CLeaveGame room.leave 响应
+type S2CLeaveGame struct {
+	Code int32  `json:"code"`
+	Msg  string `json:"msg"`
+}
+
+// S2CPlayerBack push room.onPlayerBack（对方重连恢复）
+type S2CPlayerBack struct {
+	Seat int32 `json:"seat"`
+}

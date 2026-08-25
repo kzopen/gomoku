@@ -162,6 +162,7 @@ func (r *Room) Place(uid string, x, y int32) *model.S2CPlacePiece {
 	r.Moves = append(r.Moves, model.Move{
 		Seat: int32(seat),
 		X:    x,
+		Y:    y,
 		TS:   model.UnixMS(time.Now()),
 	})
 	resp.Code = common.CodeOK
@@ -201,4 +202,48 @@ func (r *Room) seatOf(uid string) int8 {
 
 func (r *Room) pushBoth(route string, v interface{}) {
 	r.mgr.pushUsers(route, v, []string{strconv.FormatInt(r.Seat[0], 10), strconv.FormatInt(r.Seat[1], 10)})
+}
+
+// Snapshot 构造重连恢复的全量状态（room.reconnect）。
+// uid 不在本房间时返回 nil。
+func (r *Room) Snapshot(uid string) *model.S2CReconnect {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	seat := r.seatOf(uid)
+	if seat < 0 {
+		return nil
+	}
+	moves := r.Moves
+	if moves == nil {
+		moves = []model.Move{}
+	}
+	remain := int64(0)
+	if r.State == common.RoomPlaying && !r.stepDeadline.IsZero() {
+		remain = time.Until(r.stepDeadline).Milliseconds()
+		if remain < 0 {
+			remain = 0
+		}
+	}
+	return &model.S2CReconnect{
+		Code:           common.CodeOK,
+		State:          r.State,
+		Seat:           int32(seat),
+		Moves:          moves,
+		TurnSeat:       int32(r.TurnSeat),
+		StepRemainMs:   remain,
+		TotalRemainMs:  0,
+		AITakeover:     false,
+		Spectator:      false,
+		BlackUID:       r.Seat[0],
+		WhiteUID:       r.Seat[1],
+		BlackNickname:  r.blackNick,
+		WhiteNickname:  r.whiteNick,
+		StepTimeLimit:  r.StepLimit,
+		TotalTimeLimit: r.TotalTime,
+	}
+}
+
+// NotifyBack 广播玩家重连恢复（room.onPlayerBack，通知对方）
+func (r *Room) NotifyBack(seat int32) {
+	r.pushBoth("room.onPlayerBack", &model.S2CPlayerBack{Seat: seat})
 }
