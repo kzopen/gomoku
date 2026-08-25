@@ -52,13 +52,14 @@ type Config struct {
 
 // Redis key 模板（与《开发文档》§8.2 一致）
 const (
-	KeyOnline    = "online:%d"     // string；在线状态（1），TTL 60s 心跳续期
-	KeySession   = "session:%s"    // string；登录态（uid、昵称），TTL 7d
-	KeyRoom      = "room:%d"       // hash；房间摘要
-	KeyRoomMoves = "room:%d:moves" // list；走子序列
-	KeyMatchQ    = "match:queue"   // list；匹配等待队列
-	KeyRankElo   = "rank:elo"      // zset；member=uid, score=elo
-	KeyStatUser  = "stat:user:%d"  // hash；战绩缓存，TTL 1h
+	KeyOnline     = "online:%d"     // string；在线状态（1），TTL 60s 心跳续期
+	KeyOnlineZSet = "online:zset"   // zset；member=uid, score=最后心跳 unix 秒（在线人数统计，O(log N)）
+	KeySession    = "session:%s"    // string；登录态（uid、昵称），TTL 7d
+	KeyRoom       = "room:%d"       // hash；房间摘要
+	KeyRoomMoves  = "room:%d:moves" // list；走子序列
+	KeyMatchQ     = "match:queue"   // list；匹配等待队列
+	KeyRankElo    = "rank:elo"      // zset；member=uid, score=elo
+	KeyStatUser   = "stat:user:%d"  // hash；战绩缓存，TTL 1h
 )
 
 // SessionTTL / OnlineTTL / StatTTL 单位秒

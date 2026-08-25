@@ -59,6 +59,6 @@ func (c *Component) Ping(ctx context.Context, _ *model.C2SPing) (*model.S2CPing,
 	if err != nil {
 		return resp, nil
 	}
-	_ = model.SetOnline(ctx, c.rdb, uid) // TTL 60s 续期
+	_ = model.Heartbeat(ctx, c.rdb, uid) // 心跳续期：TTL 刷新 + ZSET 时间戳
 	return resp, nil
 }

@@ -4,6 +4,8 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"strconv"
+
 	"github.com/redis/go-redis/v9"
 	"time"
 )
@@ -69,17 +71,28 @@ func IsOnline(ctx context.Context, c *redis.Client, uid int64) (bool, error) {
 	return n > 0, nil
 }
 
-// OnlineCount 统计在线人数：online:* key 的数量（TTL 未过期即在线）。
-// 教学版用 Keys 简单直观；生产量大时应改用 SCAN 游标遍历避免阻塞 Redis。
+// OnlineCount 统计在线人数：60s 窗口内发过心跳的用户数（ZSET 时间戳，O(log N) 不阻塞）。
+// 先惰性清理过期成员（ZREMRANGEBYSCORE），再 ZCOUNT 统计，无需单独 TTL 和定时任务。
 func OnlineCount(ctx context.Context, c *redis.Client) (int64, error) {
 	if c == nil {
 		return 0, nil
 	}
-	keys, err := c.Keys(ctx, "online:*").Result()
-	if err != nil {
-		return 0, err
+	now := time.Now().Unix()
+	min := strconv.FormatInt(now-OnlineTTL, 10)
+	_ = c.ZRemRangeByScore(ctx, KeyOnlineZSet, "-inf", min).Err() // 踢出 60s 前的心跳
+	return c.ZCount(ctx, KeyOnlineZSet, min, "+inf").Result()
+}
+
+// Heartbeat 心跳续期：刷新 online:{uid} 的 TTL（快速判在线）+ 更新 ZSET 时间戳（统计人数）
+func Heartbeat(ctx context.Context, c *redis.Client, uid int64) error {
+	if c == nil {
+		return nil
 	}
-	return int64(len(keys)), nil
+	if err := SetOnline(ctx, c, uid); err != nil {
+		return err
+	}
+	z := &redis.Z{Score: float64(time.Now().Unix()), Member: uid}
+	return c.ZAdd(ctx, KeyOnlineZSet, *z).Err()
 }
 
 // ==================== 匹配队列 ====================
