@@ -30,19 +30,14 @@ func New(app pitaya.Pitaya, rdb *redis.Client) *Component {
 func (c *Component) OnlineCount(ctx context.Context, _ *model.C2SOnlineCount) (*model.S2COnlineCount, error) {
 	resp := &model.S2COnlineCount{}
 	if c.rdb == nil {
-		resp.Code = common.CodeInternalError
-		resp.Msg = "在线服务不可用"
-		return resp, nil
+		return common.ErrorResponse(resp, common.CodeInternalError, "在线服务不可用"), nil
 	}
 	n, err := model.OnlineCount(ctx, c.rdb)
 	if err != nil {
-		resp.Code = common.CodeInternalError
-		resp.Msg = "查询失败"
-		return resp, nil
+		return common.ErrorResponse(resp, common.CodeInternalError, "查询失败"), nil
 	}
-	resp.Code = common.CodeOK
 	resp.Count = n
-	return resp, nil
+	return common.SuccessResponse(resp, ""), nil
 }
 
 // Ping 处理 rank.ping：心跳续期（前端每 30s notify 一次，刷新 online:{uid} 的 TTL）

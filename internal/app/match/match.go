@@ -2,7 +2,6 @@ package match
 
 import (
 	"context"
-	"database/sql"
 	"github.com/redis/go-redis/v9"
 	"github.com/topfreegames/pitaya/v2"
 	"github.com/topfreegames/pitaya/v2/component"
@@ -18,7 +17,6 @@ type Component struct {
 	app pitaya.Pitaya
 	rdb *redis.Client
 	mgr *service.RoomManager
-	db  *sql.DB
 }
 
 // New 创建 match 组件
@@ -33,30 +31,20 @@ func (c *Component) Join(ctx context.Context, _ *model.C2SJoinMatch) (*model.S2C
 	resp := &model.S2CJoinMatch{}
 	uid, ok := c.uidFromCtx(ctx)
 	if !ok {
-		resp.Code = common.CodeNotLoggedIn
-		resp.Msg = "未登录"
-		return resp, nil
+		return common.ErrorResponse(resp, common.CodeNotLoggedIn, "未登录"), nil
 	}
 	if c.rdb == nil {
-		resp.Code = common.CodeInternalError
-		resp.Msg = "匹配服务不可用"
-		return resp, nil
+		return common.ErrorResponse(resp, common.CodeInternalError, "匹配服务不可用"), nil
 	}
 	uidInt, _ := strconv.ParseInt(uid, 10, 64)
 	// 已在队列中
 	if c.inQueue(ctx, uidInt) {
-		resp.Code = common.CodeAlreadyIn
-		resp.Msg = "已在匹配中"
-		return resp, nil
+		return common.ErrorResponse(resp, common.CodeAlreadyIn, "已在匹配中"), nil
 	}
 	if err := model.MatchEnqueue(ctx, c.rdb, uidInt); err != nil {
-		resp.Code = common.CodeMatchFailed
-		resp.Msg = "匹配队列已满或撮合失败"
-		return resp, nil
+		return common.ErrorResponse(resp, common.CodeMatchFailed, "匹配队列已满或撮合失败"), nil
 	}
-	resp.Code = common.CodeOK
-	resp.Msg = "已进入匹配队列"
-	return resp, nil
+	return common.SuccessResponse(resp, "已进入匹配队列"), nil
 }
 
 func (c *Component) uidFromCtx(ctx context.Context) (string, bool) {

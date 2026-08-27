@@ -20,7 +20,7 @@
 | --- | --- |
 | Go 1.26.5 | 服务端语言 |
 | [Pitaya v2](https://github.com/topfreegames/pitaya) | 游戏服务器框架（WebSocket 接入、组件路由、Session 管理） |
-| MySQL 5.7+ | 账号、战绩、对局记录（[go-sql-driver/mysql](https://github.com/go-sql-driver/mysql)） |
+| MySQL 5.7+ | 账号、战绩、对局记录（GORM + [go-sql-driver/mysql](https://github.com/go-sql-driver/mysql)） |
 | Redis | 登录态、在线状态、匹配队列、ELO 排行榜（[go-redis/v9](https://github.com/redis/go-redis)） |
 | Viper | 配置加载（YAML） |
 | Logrus | 结构化日志 |

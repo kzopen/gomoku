@@ -2,55 +2,75 @@ package model
 
 import (
 	"context"
-	"database/sql"
+	"errors"
 	"fmt"
 	"time"
 
-	_ "github.com/go-sql-driver/mysql"
+	"gorm.io/driver/mysql"
+	"gorm.io/gorm"
+	"gorm.io/gorm/clause"
 )
 
 // User 对应 user 表
 type User struct {
-	ID           int64
-	Username     string
-	PasswordHash string
-	Nickname     string
-	Avatar       string
+	ID           int64  `gorm:"column:id;primaryKey"`
+	Username     string `gorm:"column:username"`
+	PasswordHash string `gorm:"column:password_hash"`
+	Nickname     string `gorm:"column:nickname"`
+	Avatar       string `gorm:"column:avatar"`
 }
+
+func (User) TableName() string { return "user" }
 
 // UserStats 对应 player_stats 表
 type UserStats struct {
-	Wins     int32
-	Losses   int32
-	Draws    int32
-	Runaways int32
-	ELO      int32
+	UserID   int64 `gorm:"column:user_id;primaryKey"`
+	Wins     int32 `gorm:"column:wins"`
+	Losses   int32 `gorm:"column:losses"`
+	Draws    int32 `gorm:"column:draws"`
+	Runaways int32 `gorm:"column:runaways"`
+	ELO      int32 `gorm:"column:elo"`
 }
 
+func (UserStats) TableName() string { return "player_stats" }
+
 // OpenMySQL 建立 MySQL 连接池（不 Ping；连通性由调用方按需处理）
-func OpenMySQL(cfg MySQLConfig) (*sql.DB, error) {
-	db, err := sql.Open("mysql", cfg.DSN)
+func OpenMySQL(cfg MySQLConfig) (*gorm.DB, error) {
+	db, err := gorm.Open(mysql.Open(cfg.DSN), &gorm.Config{})
 	if err != nil {
 		return nil, fmt.Errorf("open mysql: %w", err)
 	}
-	db.SetMaxOpenConns(cfg.MaxOpen)
-	db.SetMaxIdleConns(cfg.MaxIdle)
-	db.SetConnMaxLifetime(3 * time.Minute)
+	sqlDB, err := db.DB()
+	if err != nil {
+		return nil, fmt.Errorf("get mysql pool: %w", err)
+	}
+	if cfg.MaxOpen > 0 {
+		sqlDB.SetMaxOpenConns(cfg.MaxOpen)
+	}
+	if cfg.MaxIdle > 0 {
+		sqlDB.SetMaxIdleConns(cfg.MaxIdle)
+	}
+	sqlDB.SetConnMaxLifetime(3 * time.Minute)
 	return db, nil
 }
 
 // Ping 健康检查
-func Ping(ctx context.Context, db *sql.DB) error {
-	return db.PingContext(ctx)
+func Ping(ctx context.Context, db *gorm.DB) error {
+	if db == nil {
+		return errors.New("mysql db is nil")
+	}
+	sqlDB, err := db.DB()
+	if err != nil {
+		return fmt.Errorf("get mysql pool: %w", err)
+	}
+	return sqlDB.PingContext(ctx)
 }
 
 // GetUserByUsername 按登录名查询用户
-func GetUserByUsername(ctx context.Context, db *sql.DB, username string) (*User, error) {
-	row := db.QueryRowContext(ctx,
-		`SELECT id, username, password_hash, nickname, avatar FROM user WHERE username = ?`, username)
+func GetUserByUsername(ctx context.Context, db *gorm.DB, username string) (*User, error) {
 	u := &User{}
-	if err := row.Scan(&u.ID, &u.Username, &u.PasswordHash, &u.Nickname, &u.Avatar); err != nil {
-		if err == sql.ErrNoRows {
+	if err := db.WithContext(ctx).Where("username = ?", username).First(u).Error; err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
 			return nil, nil // 未找到
 		}
 		return nil, fmt.Errorf("query user: %w", err)
@@ -59,12 +79,10 @@ func GetUserByUsername(ctx context.Context, db *sql.DB, username string) (*User,
 }
 
 // GetUserByID 按 uid 查询用户
-func GetUserByID(ctx context.Context, db *sql.DB, uid int64) (*User, error) {
-	row := db.QueryRowContext(ctx,
-		`SELECT id, username, password_hash, nickname, avatar FROM user WHERE id = ?`, uid)
+func GetUserByID(ctx context.Context, db *gorm.DB, uid int64) (*User, error) {
 	u := &User{}
-	if err := row.Scan(&u.ID, &u.Username, &u.PasswordHash, &u.Nickname, &u.Avatar); err != nil {
-		if err == sql.ErrNoRows {
+	if err := db.WithContext(ctx).First(u, uid).Error; err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
 			return nil, nil
 		}
 		return nil, fmt.Errorf("query user by id: %w", err)
@@ -73,31 +91,29 @@ func GetUserByID(ctx context.Context, db *sql.DB, uid int64) (*User, error) {
 }
 
 // CreateUser 注册新用户（登录即注册）；昵称默认取用户名
-func CreateUser(ctx context.Context, db *sql.DB, username, passwordHash string) (int64, error) {
-	res, err := db.ExecContext(ctx,
-		`INSERT INTO user (username, password_hash, nickname) VALUES (?, ?, ?)`,
-		username, passwordHash, username)
-	if err != nil {
-		return 0, err
+func CreateUser(ctx context.Context, db *gorm.DB, username, passwordHash string) (int64, error) {
+	u := &User{Username: username, PasswordHash: passwordHash, Nickname: username}
+	if err := db.WithContext(ctx).Create(u).Error; err != nil {
+		return 0, fmt.Errorf("create user: %w", err)
 	}
-	return res.LastInsertId()
+	return u.ID, nil
 }
 
 // CreateUserStats 初始化战绩（幂等）
-func CreateUserStats(ctx context.Context, db *sql.DB, uid int64) error {
-	_, err := db.ExecContext(ctx,
-		`INSERT IGNORE INTO player_stats (user_id, wins, losses, draws, runaways, elo) VALUES (?, 0, 0, 0, 0, 1200)`, uid)
-	return err
+func CreateUserStats(ctx context.Context, db *gorm.DB, uid int64) error {
+	stats := &UserStats{UserID: uid, ELO: 1200}
+	if err := db.WithContext(ctx).Clauses(clause.OnConflict{DoNothing: true}).Create(stats).Error; err != nil {
+		return fmt.Errorf("create user stats: %w", err)
+	}
+	return nil
 }
 
 // GetUserStats 查询玩家战绩
-func GetUserStats(ctx context.Context, db *sql.DB, uid int64) (*UserStats, error) {
-	row := db.QueryRowContext(ctx,
-		`SELECT wins, losses, draws, runaways, elo FROM player_stats WHERE user_id = ?`, uid)
+func GetUserStats(ctx context.Context, db *gorm.DB, uid int64) (*UserStats, error) {
 	s := &UserStats{}
-	if err := row.Scan(&s.Wins, &s.Losses, &s.Draws, &s.Runaways, &s.ELO); err != nil {
-		if err == sql.ErrNoRows {
-			return &UserStats{ELO: 1200}, nil // 未建档按初始分
+	if err := db.WithContext(ctx).Where("user_id = ?", uid).First(s).Error; err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return &UserStats{UserID: uid, ELO: 1200}, nil // 未建档按初始分
 		}
 		return nil, fmt.Errorf("query user stats: %w", err)
 	}

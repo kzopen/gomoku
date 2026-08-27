@@ -18,6 +18,9 @@ type S2CLogin struct {
 	Draws    int32  `json:"draws"`
 }
 
+func (r *S2CLogin) SetCode(code int32) { r.Code = code }
+func (r *S2CLogin) SetMsg(msg string)  { r.Msg = msg }
+
 type C2SJoinMatch struct {
 }
 
@@ -25,12 +28,19 @@ type S2CJoinMatch struct {
 	Code int32  `json:"code"`
 	Msg  string `json:"msg"`
 }
+
+func (r *S2CJoinMatch) SetCode(code int32) { r.Code = code }
+func (r *S2CJoinMatch) SetMsg(msg string)  { r.Msg = msg }
+
 type C2SCancelMatch struct{}
 
 type S2CCancelMatch struct {
 	Code int32  `json:"code"`
 	Msg  string `json:"msg"`
 }
+
+func (r *S2CCancelMatch) SetCode(code int32) { r.Code = code }
+func (r *S2CCancelMatch) SetMsg(msg string)  { r.Msg = msg }
 
 // S2CMatchSuccess 对应 proto S2CMatchSuccess（push room.onMatchSuccess）
 type S2CMatchSuccess struct {
@@ -95,6 +105,9 @@ type S2CPlacePiece struct {
 	Round int32  `json:"round"` // 第几手，从 1 开始
 }
 
+func (r *S2CPlacePiece) SetCode(code int32) { r.Code = code }
+func (r *S2CPlacePiece) SetMsg(msg string)  { r.Msg = msg }
+
 // ==================== 重连 / 离开 ====================
 
 // C2SReconnect room.reconnect 请求（断线恢复）
@@ -123,6 +136,9 @@ type S2CReconnect struct {
 	TotalTimeLimit int32  `json:"total_time_limit"`
 }
 
+func (r *S2CReconnect) SetCode(code int32) { r.Code = code }
+func (r *S2CReconnect) SetMsg(msg string)  { r.Msg = msg }
+
 // C2SLeaveGame room.leave 请求（主动离开判负）
 type C2SLeaveGame struct{}
 
@@ -131,6 +147,9 @@ type S2CLeaveGame struct {
 	Code int32  `json:"code"`
 	Msg  string `json:"msg"`
 }
+
+func (r *S2CLeaveGame) SetCode(code int32) { r.Code = code }
+func (r *S2CLeaveGame) SetMsg(msg string)  { r.Msg = msg }
 
 // S2CPlayerBack push room.onPlayerBack（对方重连恢复）
 type S2CPlayerBack struct {
@@ -148,6 +167,9 @@ type S2COnlineCount struct {
 	Msg   string `json:"msg"`
 	Count int64  `json:"count"`
 }
+
+func (r *S2COnlineCount) SetCode(code int32) { r.Code = code }
+func (r *S2COnlineCount) SetMsg(msg string)  { r.Msg = msg }
 
 // C2SPing rank.ping 请求（心跳续期，前端 notify 发送）
 type C2SPing struct{}

@@ -2,11 +2,11 @@ package service
 
 import (
 	"context"
-	"database/sql"
 	"github.com/topfreegames/pitaya/v2"
 	"github.com/topfreegames/pitaya/v2/session"
 	"gomoku/internal/common"
 	"gomoku/internal/model"
+	"gorm.io/gorm"
 	"strconv"
 	"sync"
 	"time"
@@ -18,7 +18,7 @@ type RoomManager struct {
 	nextID    int64
 	app       pitaya.Pitaya
 	pool      session.SessionPool
-	db        *sql.DB
+	db        *gorm.DB
 	game      model.GameConfig
 	frontType string
 }
@@ -125,7 +125,7 @@ func (m *RoomManager) pushUsers(route string, v interface{}, uids []string) {
 	}
 }
 
-func NewRoomManager(app pitaya.Pitaya, pool session.SessionPool, db *sql.DB, game model.GameConfig) *RoomManager {
+func NewRoomManager(app pitaya.Pitaya, pool session.SessionPool, db *gorm.DB, game model.GameConfig) *RoomManager {
 	return &RoomManager{
 		rooms:     make(map[int64]*Room),
 		nextID:    1,

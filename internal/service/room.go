@@ -136,25 +136,17 @@ func (r *Room) Place(uid string, x, y int32) *model.S2CPlacePiece {
 	defer r.mu.Unlock()
 	resp := &model.S2CPlacePiece{}
 	if r.State != common.RoomPlaying {
-		resp.Code = common.CodeRoomState
-		resp.Msg = "房间状态不允许（未开始/已结束）"
-		return resp
+		return common.ErrorResponse(resp, common.CodeRoomState, "房间状态不允许（未开始/已结束）")
 	}
 	seat := r.seatOf(uid)
 	if seat < 0 {
-		resp.Code = common.CodeRoomNotFound
-		resp.Msg = "不在本房间"
-		return resp
+		return common.ErrorResponse(resp, common.CodeRoomNotFound, "不在本房间")
 	}
 	if seat != r.TurnSeat {
-		resp.Code = common.CodeNotYourTurn
-		resp.Msg = "非己方回合"
-		return resp
+		return common.ErrorResponse(resp, common.CodeNotYourTurn, "非己方回合")
 	}
 	if x < 0 || x >= common.BoardSize || y < 0 || y >= common.BoardSize || r.Board[x][y] != 0 {
-		resp.Code = common.CodeIllegalMove
-		resp.Msg = "坐标越界或已有棋子"
-		return resp
+		return common.ErrorResponse(resp, common.CodeIllegalMove, "坐标越界或已有棋子")
 	}
 	color := seat + 1 //color 1=黑 2=白
 	r.Board[x][y] = int(color)
@@ -165,7 +157,6 @@ func (r *Room) Place(uid string, x, y int32) *model.S2CPlacePiece {
 		Y:    y,
 		TS:   model.UnixMS(time.Now()),
 	})
-	resp.Code = common.CodeOK
 	resp.Seat = int32(seat)
 	resp.X = x
 	resp.Y = y
@@ -187,7 +178,7 @@ func (r *Room) Place(uid string, x, y int32) *model.S2CPlacePiece {
 		StepRemainMs:  int64(r.StepLimit) * 1000,
 		TotalRemainMs: int64(r.TotalTime) * 1000,
 	})
-	return resp
+	return common.SuccessResponse(resp, "")
 }
 
 // seatOf 返回 uid 的座位；不在房间返回 -1
@@ -224,8 +215,7 @@ func (r *Room) Snapshot(uid string) *model.S2CReconnect {
 			remain = 0
 		}
 	}
-	return &model.S2CReconnect{
-		Code:           common.CodeOK,
+	resp := &model.S2CReconnect{
 		State:          r.State,
 		Seat:           int32(seat),
 		Moves:          moves,
@@ -241,6 +231,7 @@ func (r *Room) Snapshot(uid string) *model.S2CReconnect {
 		StepTimeLimit:  r.StepLimit,
 		TotalTimeLimit: r.TotalTime,
 	}
+	return common.SuccessResponse(resp, "")
 }
 
 // NotifyBack 广播玩家重连恢复（room.onPlayerBack，通知对方）

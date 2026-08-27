@@ -2,7 +2,6 @@ package main
 
 import (
 	"context"
-	"database/sql"
 	"flag"
 	"fmt"
 	"github.com/redis/go-redis/v9"
@@ -20,6 +19,7 @@ import (
 	"gomoku/internal/app/room"
 	"gomoku/internal/model"
 	"gomoku/internal/service"
+	"gorm.io/gorm"
 	"os"
 	"strings"
 	"time"
@@ -75,7 +75,7 @@ func main() {
 }
 
 // openMySQL 打开 MySQL；失败仅告警（auth 组件按 nil 降级）
-func openMySQL(cfg *model.Config, l *logrus.Logger) *sql.DB {
+func openMySQL(cfg *model.Config, l *logrus.Logger) *gorm.DB {
 	db, err := model.OpenMySQL(cfg.MySQL)
 	if err != nil {
 		l.Warnf("MySQL 连接失败（登录功能将不可用）: %v", err)
@@ -83,7 +83,7 @@ func openMySQL(cfg *model.Config, l *logrus.Logger) *sql.DB {
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
 	defer cancel()
-	if err := db.PingContext(ctx); err != nil {
+	if err := model.Ping(ctx, db); err != nil {
 		l.Warnf("MySQL Ping 失败（登录功能将不可用）: %v", err)
 		return nil
 	}

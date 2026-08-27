@@ -1,0 +1,15 @@
+proxies:
+  - name: "HK-reality"
+    type: vless
+    server: 202.60.232.42
+    port: 40443
+    uuid: 7e74fb0e-4b27-499d-af15-a36af2e56a2d
+    network: tcp
+    udp: true
+    tls: true
+    flow: xtls-rprx-vision
+    servername: itunes.apple.com
+    reality-opts:
+      public-key: _cSFZVkJ08oC62tUCFalVPWFoc-gufcAOxsaHkDK4UQ
+      short-id: 05b22c459fd532f9
+    client-fingerprint: chrome

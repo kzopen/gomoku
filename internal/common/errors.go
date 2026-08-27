@@ -19,3 +19,6 @@ type Resp struct {
 	Code int    `json:"code"`
 	Msg  string `json:"msg"`
 }
+
+func (r *Resp) SetCode(code int32) { r.Code = int(code) }
+func (r *Resp) SetMsg(msg string)  { r.Msg = msg }
