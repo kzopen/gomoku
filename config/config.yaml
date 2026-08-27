@@ -21,7 +21,7 @@ app:
   log_level: info            # debug | info | warn | error
 
 mysql:
-  dsn: "root:8A35Nn3BkrCpny65@tcp(47.97.42.179:3306)/gomoku?charset=utf8mb4&parseTime=true&loc=Local"
+  dsn: "root:123456@tcp(127.0.0.1:3306)/gomoku?charset=utf8mb4&parseTime=true&loc=Local"
   max_open: 50
   max_idle: 10
 

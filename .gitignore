@@ -26,3 +26,9 @@ config/local/
 # ===== Reasonix 会话记录（工具自动生成，不入库）=====
 .reasonix/
 reasonix.toml
+
+# ===== 备份 / 临时文件 =====
+*.bk
+*.bak
+*.tmp
+*~
